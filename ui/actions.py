@@ -100,6 +100,10 @@ def _show_viewer(note: object) -> int:
             note=note,
             sound_field_name=config.sound_field_name,
             initial_max_candidates=max_candidates_override,
+            translation_enabled=config.translation_enabled,
+            translation_provider=config.translation_provider,
+            translation_target_language=config.translation_target_language,
+            translation_timeout_seconds=config.translation_timeout_seconds,
             parent=mw,
         )
         result = dialog.exec()

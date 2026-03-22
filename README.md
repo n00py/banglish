@@ -17,6 +17,7 @@ An Anki desktop add-on for Korean vocabulary and sentence cards that reads a Kor
   - URL
   - duplicate warnings
 - Uses YouGlish for transcript text and timestamps, then extracts a local sentence audio clip with `yt-dlp` and `ffmpeg`
+- Can show an English translation for the selected sentence through DeepL Free when a local API key file is present
 - Automatically loops through browser cookies it can find and stops at the first browser that yields a usable YouTube audio stream
 - Plays the extracted sentence clip inline when Qt multimedia is available
 - Lets you refetch the current query with a larger result count from a dropdown in the viewer
@@ -62,6 +63,10 @@ addons21/
 {
   "source_field_name": "Korean",
   "sound_field_name": "Sound",
+  "translation_enabled": true,
+  "translation_provider": "deepl_free",
+  "translation_target_language": "EN-US",
+  "translation_timeout_seconds": 15,
   "max_candidates": 5,
   "exact_match_bias": true,
   "exact_match_only": false,
@@ -93,6 +98,28 @@ addons21/
   - Current behavior: it appends without overwriting existing audio, and new clips go on a new line.
   - Good reason to change it: your audio field is named `Audio`, `Pronunciation`, `Native Audio`, or something else.
   - Failure mode if wrong: the `Append to Sound` button stays disabled or reports that the field is missing.
+
+- `translation_enabled`
+  - Default: `true`
+  - What it does: allows the viewer to fetch and show an English translation for the selected Korean sentence.
+  - Important detail: this still requires a local DeepL API key file; enabling it does not store credentials in the repo config.
+  - Good reason to disable it: you do not want translation requests at all.
+
+- `translation_provider`
+  - Default: `"deepl_free"`
+  - What it does: selects the translation backend.
+  - Current status: only `deepl_free` is implemented right now.
+
+- `translation_target_language`
+  - Default: `"EN-US"`
+  - What it does: tells DeepL which English target to produce.
+  - Good alternatives: `EN-GB` if you prefer British spelling and phrasing.
+
+- `translation_timeout_seconds`
+  - Default: `15`
+  - What it does: HTTP timeout for the translation request.
+  - Good reason to increase it: your network is slow.
+  - Good reason to decrease it: you want translation failures to surface faster.
 
 - `max_candidates`
   - Default: `5`
@@ -209,6 +236,26 @@ These come from the earlier note-writing version of the add-on. They are still p
     "max_sentence_length": 80
   }
   ```
+
+## DeepL Key Setup
+
+The DeepL API key is intentionally not stored in the tracked repo config.
+
+To enable translation on a local install, put your key in:
+
+```text
+addons21/9834512704/user_files/deepl_api_key.txt
+```
+
+The file should contain only the key text on one line.
+
+Example:
+
+```text
+xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx
+```
+
+Because `user_files/` is ignored by git in this repo, that key file will stay local-only unless you manually force-add it.
 
 ## Provider Integration
 

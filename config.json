@@ -1,6 +1,10 @@
 {
   "source_field_name": "Korean",
   "sound_field_name": "Sound",
+  "translation_enabled": true,
+  "translation_provider": "deepl_free",
+  "translation_target_language": "EN-US",
+  "translation_timeout_seconds": 15,
   "max_candidates": 5,
   "exact_match_bias": true,
   "exact_match_only": false,

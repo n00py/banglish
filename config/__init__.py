@@ -29,6 +29,10 @@ class DestinationFieldMapping:
 class AddonConfig:
     source_field_name: str = "Korean"
     sound_field_name: str = "Sound"
+    translation_enabled: bool = True
+    translation_provider: str = "deepl_free"
+    translation_target_language: str = "EN-US"
+    translation_timeout_seconds: int = 15
     destination_fields: DestinationFieldMapping = field(
         default_factory=DestinationFieldMapping
     )
@@ -87,6 +91,10 @@ def config_from_dict(payload: Mapping[str, Any] | None) -> AddonConfig:
     config = AddonConfig(
         source_field_name=str(payload.get("source_field_name", "Korean")),
         sound_field_name=str(payload.get("sound_field_name", "Sound")),
+        translation_enabled=bool(payload.get("translation_enabled", True)),
+        translation_provider=str(payload.get("translation_provider", "deepl_free")),
+        translation_target_language=str(payload.get("translation_target_language", "EN-US")),
+        translation_timeout_seconds=int(payload.get("translation_timeout_seconds", 15)),
         destination_fields=destination_fields,
         max_candidates=int(payload.get("max_candidates", 5)),
         overwrite_existing=bool(payload.get("overwrite_existing", False)),

@@ -32,6 +32,7 @@ from ..services.audio_clips import (
 )
 from ..services.logging_utils import get_logger
 from ..services.sound_field import append_clip_to_note_field, note_has_field
+from ..services.translation_service import DeepLTranslationService, TranslationError
 
 
 RESULT_DONE = int(QDialog.DialogCode.Accepted)
@@ -101,6 +102,10 @@ class CandidatePickerDialog(QDialog):
         note: object | None = None,
         sound_field_name: str = "Sound",
         initial_max_candidates: int = 5,
+        translation_enabled: bool = True,
+        translation_provider: str = "deepl_free",
+        translation_target_language: str = "EN-US",
+        translation_timeout_seconds: int = 15,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -111,9 +116,18 @@ class CandidatePickerDialog(QDialog):
         self._selected_index = 0
         self._logger = get_logger(_addon_dir())
         self._audio_service = YouGlishAudioClipService(_addon_dir(), self._logger)
+        self._translation_service = DeepLTranslationService(
+            _addon_dir(),
+            target_language=translation_target_language,
+            timeout_seconds=translation_timeout_seconds,
+            logger=self._logger,
+        )
+        self._translation_enabled = translation_enabled and translation_provider == "deepl_free"
         self._media_player = None
         self._audio_output = None
         self._audio_job_running = False
+        self._translation_job_running = False
+        self._translation_request_key = ""
         self._current_clip_path: Path | None = None
         self._current_clip_candidate: ContextCandidate | None = None
         self._progress_lines: list[str] = []
@@ -174,6 +188,16 @@ class CandidatePickerDialog(QDialog):
         self.transcript_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.transcript_label.setMinimumHeight(96)
         right_layout.addWidget(self.transcript_label)
+
+        translation_title = QLabel("English Translation", right_panel)
+        translation_title.setStyleSheet("font-weight: 600;")
+        right_layout.addWidget(translation_title)
+
+        self.translation_label = QLabel(right_panel)
+        self.translation_label.setWordWrap(True)
+        self.translation_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.translation_label.setMinimumHeight(64)
+        right_layout.addWidget(self.translation_label)
 
         self.meta_label = QLabel(right_panel)
         self.meta_label.setWordWrap(True)
@@ -515,11 +539,13 @@ class CandidatePickerDialog(QDialog):
         self._sync_append_button_state()
         if candidate is None:
             self.transcript_label.setText("No transcript available.")
+            self.translation_label.setText("")
             self.meta_label.setText("")
             self.audio_panel.setText("No audio clip is selected.")
             return
 
         self.transcript_label.setText(_highlight_html(candidate.sentence_text, self._query))
+        self._load_translation(candidate)
 
         metadata = []
         if candidate.source_title:
@@ -548,6 +574,60 @@ class CandidatePickerDialog(QDialog):
             "Ready to extract local audio for this sentence.\n"
             "Progress messages will appear here while yt-dlp tries each browser cookie source."
         )
+
+    def _load_translation(self, candidate: ContextCandidate) -> None:
+        if not self._translation_enabled:
+            self.translation_label.setText("")
+            return
+        if not self._translation_service.is_configured():
+            self.translation_label.setText("DeepL translation is not configured on this machine yet.")
+            return
+
+        sentence_text = candidate.sentence_text.strip()
+        self._translation_request_key = sentence_text
+        self._translation_job_running = True
+        self.translation_label.setText("Loading English translation...")
+
+        def task() -> str:
+            return self._translation_service.translate_text(sentence_text)
+
+        def on_done(future) -> None:
+            self._translation_job_running = False
+            try:
+                translated_text = future.result()
+            except TranslationError as exc:
+                self._logger.warning("Translation failed for %s: %s", sentence_text, exc)
+                if self._translation_request_key == sentence_text:
+                    self.translation_label.setText(f"Translation unavailable: {exc}")
+                return
+            except Exception as exc:
+                self._logger.exception("Unexpected translation failure for %s", sentence_text)
+                if self._translation_request_key == sentence_text:
+                    self.translation_label.setText(f"Translation failed: {exc}")
+                return
+            if self._translation_request_key == sentence_text:
+                self.translation_label.setText(translated_text)
+
+        taskman = getattr(mw, "taskman", None)
+        if taskman is not None and hasattr(taskman, "run_in_background"):
+            taskman.run_in_background(task, on_done=on_done)
+            return
+
+        class _ImmediateFuture:
+            def __init__(self, value=None, error: Exception | None = None) -> None:
+                self._value = value
+                self._error = error
+
+            def result(self):
+                if self._error is not None:
+                    raise self._error
+                return self._value
+
+        try:
+            translated_text = task()
+            on_done(_ImmediateFuture(value=translated_text))
+        except Exception as exc:
+            on_done(_ImmediateFuture(error=exc))
 
     def _sync_append_button_state(self) -> None:
         can_append = (
