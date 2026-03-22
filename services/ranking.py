@@ -78,6 +78,6 @@ def rank_candidates(
     for candidate in prepared:
         score_candidate(candidate, query, config)
     prepared.sort(
-        key=lambda candidate: (-candidate.score, len(normalize_text(candidate.sentence_text)))
+        key=lambda candidate: (len(normalize_text(candidate.sentence_text)), -candidate.score)
     )
     return prepared
