@@ -77,26 +77,136 @@ addons21/
 
 ## Config Options
 
+### Active options in the shipped `config.json`
+
 - `source_field_name`
-  - field used to read the Korean search term
-- `max_candidates`
-  - capped to the add-on UI range of `3` to `10`
+  - Default: `"Korean"`
+  - What it does: tells the add-on which note field to read when it needs the search term.
+  - When it matters: every fetch starts here in editor mode, browser mode, and review mode.
+  - Good reason to change it: your Korean text lives in a field called something like `Expression`, `Target`, or `Sentence`.
+  - Failure mode if wrong: the add-on will tell you the source field is missing or empty.
+
 - `sound_field_name`
-  - field that receives appended `[sound:...]` tags when you click `Append to Sound`
+  - Default: `"Sound"`
+  - What it does: tells the `Append to Sound` action where to append the imported `[sound:...]` tag.
+  - Current behavior: it appends without overwriting existing audio, and new clips go on a new line.
+  - Good reason to change it: your audio field is named `Audio`, `Pronunciation`, `Native Audio`, or something else.
+  - Failure mode if wrong: the `Append to Sound` button stays disabled or reports that the field is missing.
+
+- `max_candidates`
+  - Default: `5`
+  - What it does: controls how many ranked YouGlish candidates the viewer shows for a search.
+  - Effective range: the add-on clamps this to `3` through `10`, even if you enter something outside that range.
+  - Lower values: faster to scan, less clutter.
+  - Higher values: more chances to find a good sentence, but more noise.
+
 - `exact_match_bias`
-  - favors candidates containing the exact query text
+  - Default: `true`
+  - What it does: adds a ranking bonus to candidates that contain the exact query text.
+  - Important detail: this does not filter anything by itself; it just pushes exact matches higher.
+  - Good reason to disable it: you want broader contextual examples, including conjugated or nearby subtitle variants.
+
 - `exact_match_only`
-  - rejects candidates that do not contain the exact query text
+  - Default: `false`
+  - What it does: filters out candidates that do not contain the exact query string.
+  - Important detail: this is stricter than `exact_match_bias`.
+  - Good reason to enable it: you only want literal hits for the exact Korean form on your card.
+  - Tradeoff: you may get fewer results or no results for inflected words, spacing variants, or noisier subtitles.
+
 - `max_sentence_length`
-  - filters out long subtitle lines
+  - Default: `120`
+  - What it does: filters out very long subtitle lines before ranking.
+  - Unit: approximate character count of the sentence text returned by the provider.
+  - Lower values: cleaner, shorter, more study-friendly lines.
+  - Higher values: allows longer subtitle chunks, but increases clutter and subtitle noise.
+
 - `duplicate_detection_enabled`
-  - marks candidates whose transcript already appears in another note
+  - Default: `true`
+  - What it does: checks whether a transcript sentence already appears in another note and flags duplicates in the viewer.
+  - Important detail: it warns and annotates; it does not block playback or selection.
+  - Good reason to disable it: you want slightly faster lookups or do not care about transcript reuse across notes.
+
 - `provider_order`
-  - provider preference order
+  - Default: `["scrape_fallback", "youglish_widget"]`
+  - What it does: controls which YouGlish provider adapter is tried first.
+  - `scrape_fallback`: currently the most reliable default in this add-on; it parses the YouGlish page/bootstrap payload.
+  - `youglish_widget`: the alternate adapter based on the YouGlish widget path.
+  - Good reason to change it: only if you are troubleshooting provider behavior or experimenting with a different fetch path.
+
 - `request_timeout_seconds`
-  - HTTP timeout for the fallback adapter
+  - Default: `12`
+  - What it does: sets the HTTP timeout for the YouGlish fetch layer.
+  - Important detail: this is for provider requests, not for `yt-dlp` audio extraction and not for `ffmpeg`.
+  - Lower values: fail faster on weak network conditions.
+  - Higher values: can help on slow connections, but also makes bad requests hang longer before erroring.
+
 - `user_agent`
-  - request header for the fallback adapter
+  - Default: `"Anki YouGlish Korean Context Grabber/0.1"`
+  - What it does: sets the `User-Agent` header used by the fallback provider HTTP requests.
+  - Good reason to change it: almost none for normal use.
+  - Best practice: leave this alone unless you are debugging provider-specific request behavior.
+
+### Parsed by the code, but not part of the current recommended workflow
+
+These come from the earlier note-writing version of the add-on. They are still parsed for compatibility, but the current UI does not use them in normal operation.
+
+- `destination_fields`
+  - Default:
+    ```json
+    {
+      "sentence": "Context Sentence",
+      "source": "Context Source",
+      "url": "Context URL",
+      "timestamp": "Context Timestamp",
+      "translation": "Context Translation"
+    }
+    ```
+  - Original purpose: map fetched data into note fields when writing context directly back to cards.
+  - Current status: not used by the current read-only viewer / `Append to Sound` flow.
+
+- `overwrite_existing`
+  - Default: `false`
+  - Original purpose: allow overwriting protected destination fields when writing note content.
+  - Current status: not used by the current workflow.
+
+- `protected_fields`
+  - Default:
+    ```json
+    [
+      "Context Sentence",
+      "Context Source",
+      "Context URL",
+      "Context Timestamp",
+      "Context Translation"
+    ]
+    ```
+  - Original purpose: list of fields that should not be overwritten unless explicitly allowed.
+  - Current status: not used by the current workflow.
+
+### Practical examples
+
+- If your Korean text is stored in `Expression`, change:
+  ```json
+  {
+    "source_field_name": "Expression"
+  }
+  ```
+
+- If your note’s audio field is called `Audio`, change:
+  ```json
+  {
+    "sound_field_name": "Audio"
+  }
+  ```
+
+- If you only want literal matches and fewer lines:
+  ```json
+  {
+    "exact_match_only": true,
+    "max_candidates": 4,
+    "max_sentence_length": 80
+  }
+  ```
 
 ## Provider Integration
 
