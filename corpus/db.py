@@ -257,14 +257,16 @@ class KimchiCorpusDatabase:
                 (status, finished_at, error_message, run_id),
             )
 
-    def latest_discovery_cursor(self, recipe_hash: str) -> dict[str, Any] | None:
+    def latest_discovery_cursor(self, recipe_hash: str, *, active_only: bool = False) -> dict[str, Any] | None:
         with self.connect() as conn:
+            status_filter = "AND status IN ('running', 'paused')" if active_only else ""
             row = conn.execute(
                 """
                 SELECT cursor_last_row_id, cursor_last_star_count, cursor_last_complexity_score,
                        cursor_last_comprehension_percentage
                 FROM discovery_runs
                 WHERE recipe_hash = ? AND cursor_last_row_id IS NOT NULL
+                """ + status_filter + """
                 ORDER BY id DESC LIMIT 1
                 """,
                 (recipe_hash,),
@@ -389,6 +391,9 @@ class KimchiCorpusDatabase:
                     json_dumps(dict(item)),
                 ),
             )
+            if not youtube_video_id:
+                self._record_hydration_run(conn, kimchi_id, "completed", hydrated_at, None)
+                return ""
             now = hydrated_at
             conn.execute(
                 """

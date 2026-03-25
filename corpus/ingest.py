@@ -46,9 +46,10 @@ class KimchiCorpusIngestor:
         *,
         progress_callback: Callable[[str], None] | None = None,
         max_pages: int | None = None,
+        resume: bool = True,
     ) -> BackfillSummary:
-        run_id = self._db.begin_discovery_run(self._recipe_hash, utc_now_iso(), resume=True)
-        cursor_state = self._db.latest_discovery_cursor(self._recipe_hash)
+        run_id = self._db.begin_discovery_run(self._recipe_hash, utc_now_iso(), resume=resume)
+        cursor_state = self._db.latest_discovery_cursor(self._recipe_hash, active_only=True) if resume else None
         cursor = None
         if cursor_state and cursor_state.get("cursor_last_row_id"):
             cursor = KimchiBrowseCursor(
@@ -122,7 +123,7 @@ class KimchiCorpusIngestor:
         )
 
     def recheck_discovery(self, *, progress_callback: Callable[[str], None] | None = None) -> BackfillSummary:
-        return self.backfill(progress_callback=progress_callback)
+        return self.backfill(progress_callback=progress_callback, resume=False)
 
     def recheck_subtitles(
         self,
