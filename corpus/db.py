@@ -703,6 +703,17 @@ class KimchiCorpusDatabase:
             ).fetchall()
         return [str(row["youtube_video_id"]) for row in rows]
 
+    def subtitle_status(self, youtube_video_id: str) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT subtitle_status FROM youtube_videos WHERE youtube_video_id = ?",
+                (youtube_video_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        value = row["subtitle_status"]
+        return str(value) if value is not None else None
+
     def subtitle_retry_allowed(self, youtube_video_id: str, *, failed_retry_before: str | None = None) -> bool:
         if not failed_retry_before:
             return True

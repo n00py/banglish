@@ -286,6 +286,13 @@ class KimchiCorpusIngestor:
             if not youtube_video_id:
                 self._sleep_with_jitter(sleep_between_items)
                 continue
+            if self._db.subtitle_status(youtube_video_id) == "ready":
+                self._emit(
+                    progress_callback,
+                    f"Skipping subtitle fetch for {youtube_video_id}; subtitles are already ready.",
+                )
+                self._sleep_with_jitter(sleep_between_items)
+                continue
             if not self._db.subtitle_retry_allowed(
                 youtube_video_id,
                 failed_retry_before=failed_retry_before,
