@@ -68,6 +68,8 @@ class KimchiCorpusIngestor:
         items_discovered = 0
         hydrated = 0
         subtitle_ready = 0
+        next_hydrated_checkpoint = 1000
+        next_subtitle_checkpoint = 1000
         try:
             while True:
                 if max_pages is not None and pages_fetched >= max_pages:
@@ -106,6 +108,18 @@ class KimchiCorpusIngestor:
                 )
                 hydrated += hydrated_delta
                 subtitle_ready += subtitle_delta
+                next_hydrated_checkpoint = self._emit_count_checkpoint(
+                    progress_callback,
+                    label="Hydrated items",
+                    current_value=hydrated,
+                    next_checkpoint=next_hydrated_checkpoint,
+                )
+                next_subtitle_checkpoint = self._emit_count_checkpoint(
+                    progress_callback,
+                    label="Subtitle-ready videos",
+                    current_value=subtitle_ready,
+                    next_checkpoint=next_subtitle_checkpoint,
+                )
                 self._sleep_with_jitter(sleep_between_pages)
                 if next_cursor is None or next_cursor.last_row_id == (cursor.last_row_id if cursor else ""):
                     break
@@ -120,6 +134,18 @@ class KimchiCorpusIngestor:
                     break
                 hydrated += hydrated_delta
                 subtitle_ready += subtitle_delta
+                next_hydrated_checkpoint = self._emit_count_checkpoint(
+                    progress_callback,
+                    label="Hydrated items",
+                    current_value=hydrated,
+                    next_checkpoint=next_hydrated_checkpoint,
+                )
+                next_subtitle_checkpoint = self._emit_count_checkpoint(
+                    progress_callback,
+                    label="Subtitle-ready videos",
+                    current_value=subtitle_ready,
+                    next_checkpoint=next_subtitle_checkpoint,
+                )
             self._db.finish_discovery_run(run_id, utc_now_iso(), None)
         except KeyboardInterrupt as exc:
             self._db.pause_discovery_run(run_id, utc_now_iso(), str(exc) or "Interrupted by user")
@@ -223,6 +249,20 @@ class KimchiCorpusIngestor:
         if delay <= 0:
             return
         time.sleep(delay + random.uniform(0.0, min(0.5, delay * 0.25)))
+
+    def _emit_count_checkpoint(
+        self,
+        progress_callback: Callable[[str], None] | None,
+        *,
+        label: str,
+        current_value: int,
+        next_checkpoint: int,
+    ) -> int:
+        checkpoint = max(1000, next_checkpoint)
+        while current_value >= checkpoint:
+            self._emit(progress_callback, f"{label}: {checkpoint}")
+            checkpoint += 1000
+        return checkpoint
 
 
 def _iso_timestamp_seconds_ago(seconds: float) -> str:
