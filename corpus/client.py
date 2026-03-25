@@ -71,12 +71,15 @@ class KimchiAPIClient:
         self,
         cursor: KimchiBrowseCursor | None = None,
         *,
-        min_stars: int = 1,
+        min_stars: int | None = 1,
+        made_for: str | None = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "ordering": "stars",
             "sources": ["youtube_channel"],
         }
+        if made_for:
+            payload["made_for"] = made_for
         if cursor is not None:
             payload["last_row_id"] = cursor.last_row_id
             payload["last_star_count"] = cursor.last_star_count
@@ -89,14 +92,19 @@ class KimchiAPIClient:
         )
         items = response.get("items")
         if isinstance(items, list):
-            filtered_items = [
-                item
-                for item in items
-                if isinstance(item, Mapping) and _group_star_count(item) >= min_stars
-            ]
+            filtered_items = []
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                if min_stars is not None and _group_star_count(item) < min_stars:
+                    continue
+                filtered_items.append(item)
             response["items"] = filtered_items
             response["reached_min_stars_floor"] = (
-                bool(items) and len(filtered_items) < len(items) and _group_star_count(items[-1]) < min_stars
+                min_stars is not None
+                and bool(items)
+                and len(filtered_items) < len(items)
+                and _group_star_count(items[-1]) < min_stars
             )
         return response
 

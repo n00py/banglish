@@ -47,7 +47,7 @@ class KimchiCorpusIngestor:
         self._logger = logger or logging.getLogger(__name__)
         self._client = client or KimchiAPIClient(logger=self._logger)
         self._subtitle_fetcher = subtitle_fetcher or ManualKoreanSubtitleFetcher(addon_dir, self._logger)
-        self._recipe_hash = hashlib.sha256(b"kimchi-browse-youtube-channels-stars-v1").hexdigest()
+        self._recipe_hash = hashlib.sha256(b"kimchi-browse-youtube-channels-learner-v1").hexdigest()
 
     def backfill(
         self,
@@ -80,7 +80,11 @@ class KimchiCorpusIngestor:
             while True:
                 if max_pages is not None and pages_fetched >= max_pages:
                     break
-                payload = self._client.browse_channel_groups(cursor, min_stars=1)
+                payload = self._client.browse_channel_groups(
+                    cursor,
+                    min_stars=None,
+                    made_for="learner",
+                )
                 groups = payload.get("items") or []
                 if not isinstance(groups, list) or not groups:
                     break
@@ -133,11 +137,7 @@ class KimchiCorpusIngestor:
                     next_checkpoint=next_subtitle_checkpoint,
                 )
                 self._sleep_with_jitter(sleep_between_pages)
-                if (
-                    bool(payload.get("reached_min_stars_floor"))
-                    or next_cursor is None
-                    or next_cursor.last_row_id == (cursor.last_row_id if cursor else "")
-                ):
+                if next_cursor is None or next_cursor.last_row_id == (cursor.last_row_id if cursor else ""):
                     break
                 cursor = next_cursor
             while self._db.pending_hydration_ids(1):
