@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from .text import clean_text, normalize_text, tokenized_text_blob
+from ..services.storage_paths import subtitle_cache_dir
 
 
 SUPPORTED_COOKIE_BROWSERS = (
@@ -219,8 +220,7 @@ class ManualKoreanSubtitleFetcher:
     def __init__(self, addon_dir: Path, logger: logging.Logger | None = None) -> None:
         self._addon_dir = addon_dir
         self._logger = logger or logging.getLogger(__name__)
-        self._cache_dir = addon_dir / "user_files" / "kimchi_subtitles"
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_dir = subtitle_cache_dir(addon_dir)
 
     def fetch_for_video(
         self,

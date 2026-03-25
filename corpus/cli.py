@@ -8,6 +8,7 @@ from pathlib import Path
 from .api import KimchiCorpusAPIServer
 from .db import KimchiCorpusDatabase
 from .ingest import KimchiCorpusIngestor
+from ..services.storage_paths import corpus_db_path
 
 
 def _addon_dir_from_args(args: argparse.Namespace) -> Path:
@@ -41,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
     addon_dir = _addon_dir_from_args(args)
-    db = KimchiCorpusDatabase(addon_dir / "user_files" / "kimchi_corpus.sqlite3")
+    db = KimchiCorpusDatabase(corpus_db_path(addon_dir))
     ingestor = KimchiCorpusIngestor(addon_dir, db)
 
     if args.command == "serve":

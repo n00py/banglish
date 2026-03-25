@@ -7,15 +7,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from .storage_paths import banglish_data_dir, deepl_key_path, translation_cache_path
+
 
 class TranslationError(RuntimeError):
     pass
 
 
 def deepl_api_key_path(addon_dir: Path) -> Path:
-    user_files_dir = addon_dir / "user_files"
-    user_files_dir.mkdir(parents=True, exist_ok=True)
-    return user_files_dir / "deepl_api_key.txt"
+    banglish_data_dir(addon_dir)
+    return deepl_key_path(addon_dir)
 
 
 def load_deepl_api_key(addon_dir: Path, logger: logging.Logger | None = None) -> str:
@@ -51,10 +52,9 @@ class DeepLTranslationService:
     ) -> None:
         self._addon_dir = addon_dir
         self._logger = logger or logging.getLogger(__name__)
-        self._user_files_dir = addon_dir / "user_files"
-        self._user_files_dir.mkdir(parents=True, exist_ok=True)
+        self._user_files_dir = banglish_data_dir(addon_dir)
         self._key_path = deepl_api_key_path(addon_dir)
-        self._cache_path = self._user_files_dir / "translation_cache.json"
+        self._cache_path = translation_cache_path(addon_dir)
         self._target_language = (target_language or "EN-US").strip().upper()
         self._timeout_seconds = max(1, int(timeout_seconds))
         self._cache = self._load_cache()
@@ -74,7 +74,7 @@ class DeepLTranslationService:
         api_key = self._load_api_key()
         if not api_key:
             raise TranslationError(
-                "DeepL translation is not configured. Add your key to user_files/deepl_api_key.txt."
+                f"DeepL translation is not configured. Add your key to {self._key_path}."
             )
 
         payload = urlencode(

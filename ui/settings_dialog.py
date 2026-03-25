@@ -19,6 +19,7 @@ from aqt.utils import tooltip
 
 from ..config import config_from_dict
 from ..services.local_api_runtime import ensure_local_api_started
+from ..services.storage_paths import banglish_data_dir, corpus_db_path
 from ..services.translation_service import (
     clear_deepl_api_key,
     deepl_api_key_path,
@@ -43,7 +44,7 @@ class DeepLSettingsDialog(QDialog):
 
         intro = QLabel(
             "Set your DeepL API key for English translations. "
-            "The key is saved locally in this add-on's user_files folder and is not stored in git.",
+            "The key is saved locally in the BanGlish app-data folder and is not stored in git.",
             self,
         )
         intro.setWordWrap(True)
@@ -74,7 +75,7 @@ class DeepLSettingsDialog(QDialog):
         layout.addWidget(self.status_label)
 
         corpus_intro = QLabel(
-            "Kimchi local corpus controls. The API runs locally and stores its SQLite database in this add-on's user_files folder.",
+            "Kimchi local corpus controls. The API runs locally and stores its SQLite database in the BanGlish app-data folder.",
             self,
         )
         corpus_intro.setWordWrap(True)
@@ -147,7 +148,8 @@ class DeepLSettingsDialog(QDialog):
             self.corpus_status_label.setText(
                 "Kimchi corpus API is not reachable yet.\n"
                 f"Local API: {self._config.local_api_base_url}\n"
-                f"Database: {self._addon_dir / 'user_files' / 'kimchi_corpus.sqlite3'}\n"
+                f"Data dir: {banglish_data_dir(self._addon_dir)}\n"
+                f"Database: {corpus_db_path(self._addon_dir)}\n"
                 f"Error: {exc}"
             )
             return
@@ -156,8 +158,10 @@ class DeepLSettingsDialog(QDialog):
         self.corpus_status_label.setText(
             "Local API: "
             + self._config.local_api_base_url
+            + "\nData dir: "
+            + str(banglish_data_dir(self._addon_dir))
             + "\nDatabase: "
-            + str(self._addon_dir / "user_files" / "kimchi_corpus.sqlite3")
+            + str(corpus_db_path(self._addon_dir))
             + "\nKimchi media: "
             + str(stats.get("kimchi_media", 0))
             + " | Videos: "

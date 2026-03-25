@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..provider.models import ContextCandidate
+from .storage_paths import audio_cache_dir, log_path
 
 
 class AudioClipError(RuntimeError):
@@ -402,8 +403,7 @@ class YouGlishAudioClipService:
     def __init__(self, addon_dir: Path, logger: logging.Logger | None = None) -> None:
         self._addon_dir = addon_dir
         self._logger = logger or logging.getLogger(__name__)
-        self._cache_dir = addon_dir / "user_files" / "audio_cache"
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_dir = audio_cache_dir(addon_dir)
 
     def ensure_clip(
         self,
@@ -742,7 +742,7 @@ class YouGlishAudioClipService:
         raise AudioClipError(
             "Could not fetch the YouTube audio stream with any browser cookies. "
             "Try being signed into YouTube in Firefox, Chrome, or Safari. "
-            "See user_files/youglish_context.log for details. "
+            f"See {log_path(self._addon_dir)} for details. "
             f"Recent errors: {joined_errors}"
         )
 
@@ -797,7 +797,7 @@ class YouGlishAudioClipService:
             )
             raise AudioClipError(
                 "ffmpeg could not cut the selected sentence audio. "
-                "See user_files/youglish_context.log for details."
+                f"See {log_path(self._addon_dir)} for details."
             )
         self._emit(progress_callback, "ffmpeg finished cutting the sentence clip.")
 

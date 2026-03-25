@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from .storage_paths import banglish_data_dir, log_path
+
 
 LOGGER_NAME = "youglish_korean_context_grabber"
 
@@ -12,11 +14,10 @@ def get_logger(addon_dir: Path) -> logging.Logger:
     if logger.handlers:
         return logger
     logger.setLevel(logging.INFO)
-    log_dir = addon_dir / "user_files"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "youglish_context.log"
+    banglish_data_dir(addon_dir)
+    path = log_path(addon_dir)
     try:
-        handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler = logging.FileHandler(path, encoding="utf-8")
     except Exception:
         handler = logging.NullHandler()
     formatter = logging.Formatter(

@@ -10,6 +10,7 @@ from ..config import AddonConfig
 from ..corpus.api import KimchiCorpusAPIServer
 from ..corpus.db import KimchiCorpusDatabase
 from ..corpus.ingest import KimchiCorpusIngestor
+from .storage_paths import corpus_db_path
 
 
 _RUNTIME_LOCK = threading.Lock()
@@ -28,7 +29,7 @@ def ensure_local_api_started(
         if _RUNTIME_THREAD is not None and _RUNTIME_THREAD.is_alive():
             return
         host, port = _host_port_from_base_url(config.local_api_base_url)
-        db = KimchiCorpusDatabase(addon_dir / "user_files" / "kimchi_corpus.sqlite3", logger=logger)
+        db = KimchiCorpusDatabase(corpus_db_path(addon_dir), logger=logger)
         ingestor = KimchiCorpusIngestor(addon_dir, db, logger=logger)
         _RUNTIME_SERVER = KimchiCorpusAPIServer(
             addon_dir=addon_dir,
