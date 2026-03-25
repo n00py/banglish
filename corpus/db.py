@@ -285,6 +285,7 @@ class KimchiCorpusDatabase:
         if not kimchi_id:
             return False
         youtube_video_id = self._youtube_video_id_from_sources(item.get("sources") or [])
+        group = item.get("group") or {}
         with self.connect() as conn:
             existing = conn.execute(
                 "SELECT kimchi_id FROM kimchi_media WHERE kimchi_id = ?",
@@ -295,8 +296,8 @@ class KimchiCorpusDatabase:
                 INSERT INTO kimchi_media (
                     kimchi_id, youtube_video_id, youtube_url, name_ko, name_en, duration_sec, stars,
                     starred, lemma_count, complexity_score, release_date, hidden, unrecognized_count,
-                    updated_at, thumbnail_shape, status, raw_browse_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?)
+                    updated_at, thumbnail_shape, group_id, group_name_ko, group_name_en, status, raw_browse_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?)
                 ON CONFLICT(kimchi_id) DO UPDATE SET
                     youtube_video_id = excluded.youtube_video_id,
                     youtube_url = excluded.youtube_url,
@@ -312,6 +313,9 @@ class KimchiCorpusDatabase:
                     unrecognized_count = excluded.unrecognized_count,
                     updated_at = excluded.updated_at,
                     thumbnail_shape = excluded.thumbnail_shape,
+                    group_id = COALESCE(excluded.group_id, kimchi_media.group_id),
+                    group_name_ko = COALESCE(excluded.group_name_ko, kimchi_media.group_name_ko),
+                    group_name_en = COALESCE(excluded.group_name_en, kimchi_media.group_name_en),
                     raw_browse_json = excluded.raw_browse_json,
                     status = CASE
                         WHEN kimchi_media.raw_browse_json != excluded.raw_browse_json THEN 'discovered'
@@ -334,6 +338,9 @@ class KimchiCorpusDatabase:
                     int(item.get("unrecognized_count", 0) or 0),
                     str(item.get("updated_at", "") or ""),
                     str(item.get("thumbnail_shape", "") or ""),
+                    str(group.get("id", "") or ""),
+                    str(group.get("name_ko", "") or ""),
+                    str(group.get("name_en", "") or ""),
                     json_dumps(dict(item)),
                 ),
             )

@@ -89,12 +89,48 @@ class KimchiAPIClient:
         )
         items = response.get("items")
         if isinstance(items, list):
-            response["items"] = [
+            filtered_items = [
                 item
                 for item in items
                 if isinstance(item, Mapping) and _group_star_count(item) >= min_stars
             ]
+            response["items"] = filtered_items
+            response["reached_min_stars_floor"] = (
+                bool(items) and len(filtered_items) < len(items) and _group_star_count(items[-1]) < min_stars
+            )
         return response
+
+    def get_media_group(self, group_id: str) -> Dict[str, Any]:
+        return self._json_request(
+            path=f"/v2/media/group/{group_id}",
+            method="GET",
+        )
+
+    def get_group_items(
+        self,
+        group_id: str,
+        *,
+        page: int,
+        order_by: str = "complexity",
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "page": page,
+            "order_by": order_by,
+            "min_comprehension": None,
+            "max_comprehension": None,
+            "min_complexity_score": None,
+            "max_complexity_score": None,
+            "min_stars": None,
+            "max_stars": None,
+            "min_duration_sec": None,
+            "max_duration_sec": None,
+            "include_starred": None,
+        }
+        return self._json_request(
+            path=f"/v2/media/group/{group_id}/items",
+            method="POST",
+            payload=payload,
+        )
 
     def get_media_item(self, kimchi_id: str) -> Dict[str, Any]:
         return self._json_request(

@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .client import KimchiAPIClient, KimchiBrowseCursor, latest_browse_cursor, youtube_source_id
+from .client import (
+    KimchiAPIClient,
+    KimchiBrowseCursor,
+    latest_browse_cursor,
+    youtube_channel_source_id,
+    youtube_source_id,
+)
 from .db import KimchiCorpusDatabase
 from .subtitles import ManualKoreanSubtitleFetcher, SubtitleFetchError
 
@@ -41,7 +47,7 @@ class KimchiCorpusIngestor:
         self._logger = logger or logging.getLogger(__name__)
         self._client = client or KimchiAPIClient(logger=self._logger)
         self._subtitle_fetcher = subtitle_fetcher or ManualKoreanSubtitleFetcher(addon_dir, self._logger)
-        self._recipe_hash = hashlib.sha256(b"kimchi-browse-stars-youtube-v1").hexdigest()
+        self._recipe_hash = hashlib.sha256(b"kimchi-browse-youtube-channels-stars-v1").hexdigest()
 
     def backfill(
         self,
@@ -74,19 +80,22 @@ class KimchiCorpusIngestor:
             while True:
                 if max_pages is not None and pages_fetched >= max_pages:
                     break
-                payload = self._client.browse_items(cursor)
-                items = payload.get("items") or []
-                if not isinstance(items, list) or not items:
+                payload = self._client.browse_channel_groups(cursor, min_stars=1)
+                groups = payload.get("items") or []
+                if not isinstance(groups, list) or not groups:
                     break
-                new_items = 0
-                for item in items:
-                    if not isinstance(item, dict):
+                discovered_this_page = 0
+                for group in groups:
+                    if not isinstance(group, dict):
                         continue
-                    if not youtube_source_id(item):
+                    if not youtube_channel_source_id(group):
                         continue
-                    if self._db.upsert_browse_item(item):
-                        new_items += 1
-                next_cursor = latest_browse_cursor(item for item in items if isinstance(item, dict))
+                    discovered_this_page += self._discover_group_items(
+                        group,
+                        progress_callback=progress_callback,
+                        sleep_between_pages=sleep_between_pages,
+                    )
+                next_cursor = latest_browse_cursor(group for group in groups if isinstance(group, dict))
                 self._db.discovery_checkpoint(
                     run_id,
                     cursor_last_row_id=next_cursor.last_row_id if next_cursor else None,
@@ -96,11 +105,14 @@ class KimchiCorpusIngestor:
                         next_cursor.last_comprehension_percentage if next_cursor else None
                     ),
                     pages_fetched_delta=1,
-                    items_discovered_delta=len(items),
+                    items_discovered_delta=discovered_this_page,
                 )
                 pages_fetched += 1
-                items_discovered += len(items)
-                self._emit(progress_callback, f"Fetched Kimchi browse page {pages_fetched} with {len(items)} items.")
+                items_discovered += discovered_this_page
+                self._emit(
+                    progress_callback,
+                    f"Fetched Kimchi channel page {pages_fetched} with {len(groups)} channels and {discovered_this_page} episodes.",
+                )
                 hydrated_delta, subtitle_delta = self._hydrate_and_fetch_subtitles(
                     progress_callback=progress_callback,
                     sleep_between_items=sleep_between_items,
@@ -121,7 +133,11 @@ class KimchiCorpusIngestor:
                     next_checkpoint=next_subtitle_checkpoint,
                 )
                 self._sleep_with_jitter(sleep_between_pages)
-                if next_cursor is None or next_cursor.last_row_id == (cursor.last_row_id if cursor else ""):
+                if (
+                    bool(payload.get("reached_min_stars_floor"))
+                    or next_cursor is None
+                    or next_cursor.last_row_id == (cursor.last_row_id if cursor else "")
+                ):
                     break
                 cursor = next_cursor
             while self._db.pending_hydration_ids(1):
@@ -191,6 +207,59 @@ class KimchiCorpusIngestor:
             processed += 1
             self._sleep_with_jitter(sleep_between_items)
         return processed
+
+    def _discover_group_items(
+        self,
+        group_summary: dict[str, object],
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+        sleep_between_pages: float = 0.0,
+    ) -> int:
+        group_id = str(group_summary.get("id", "") or "").strip()
+        if not group_id:
+            return 0
+        group_name = str(group_summary.get("name_ko", "") or group_summary.get("name_en", "") or group_id)
+        try:
+            group_payload = self._client.get_media_group(group_id)
+        except Exception as exc:
+            self._logger.warning("Group metadata fetch failed for %s: %s", group_id, exc)
+            group_payload = dict(group_summary)
+
+        discovered = 0
+        page = 1
+        while True:
+            page_payload = self._client.get_group_items(group_id, page=page, order_by="complexity")
+            items = page_payload.get("items") or []
+            if not isinstance(items, list) or not items:
+                break
+            new_items = 0
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                if not youtube_source_id(item):
+                    continue
+                enriched_item = dict(item)
+                enriched_item["group"] = {
+                    "id": group_id,
+                    "name_ko": str(group_payload.get("name_ko", "") or group_summary.get("name_ko", "") or ""),
+                    "name_en": str(group_payload.get("name_en", "") or group_summary.get("name_en", "") or ""),
+                }
+                if self._db.upsert_browse_item(enriched_item):
+                    new_items += 1
+            discovered += new_items
+            self._emit(
+                progress_callback,
+                f"Fetched channel {group_name} page {page} with {len(items)} episodes ({new_items} new).",
+            )
+            count = _safe_int(page_payload.get("count"))
+            end = _safe_int(page_payload.get("end"))
+            if count and end and end >= count:
+                break
+            if len(items) < 100:
+                break
+            page += 1
+            self._sleep_with_jitter(sleep_between_pages)
+        return discovered
 
     def _hydrate_and_fetch_subtitles(
         self,
@@ -268,3 +337,10 @@ class KimchiCorpusIngestor:
 def _iso_timestamp_seconds_ago(seconds: float) -> str:
     cutoff = datetime.now(timezone.utc).timestamp() - max(0.0, seconds)
     return datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat()
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return 0
