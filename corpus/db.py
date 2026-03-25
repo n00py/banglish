@@ -57,10 +57,15 @@ SCHEMA_STATEMENTS = (
     CREATE TABLE IF NOT EXISTS subtitle_tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         youtube_video_id TEXT NOT NULL,
+        kimchi_id TEXT,
         language_code TEXT NOT NULL,
         is_manual INTEGER NOT NULL DEFAULT 1,
         source_label TEXT NOT NULL,
         fetch_status TEXT NOT NULL,
+        stars INTEGER,
+        complexity_score REAL,
+        lemma_count INTEGER,
+        unrecognized_count INTEGER,
         checksum TEXT,
         fetched_at TEXT NOT NULL,
         raw_subtitle_path TEXT,
@@ -164,6 +169,7 @@ class KimchiCorpusDatabase:
         with self.connect() as conn:
             for statement in SCHEMA_STATEMENTS:
                 conn.execute(statement)
+            self._apply_schema_migrations(conn)
 
     def stats(self) -> dict[str, Any]:
         with self.connect() as conn:
@@ -426,6 +432,16 @@ class KimchiCorpusDatabase:
         checked_at: str,
     ) -> int:
         with self.connect() as conn:
+            metadata_row = conn.execute(
+                """
+                SELECT kimchi_id, stars, complexity_score, lemma_count, unrecognized_count
+                FROM kimchi_media
+                WHERE youtube_video_id = ?
+                ORDER BY stars DESC, complexity_score ASC, updated_at DESC, kimchi_id ASC
+                LIMIT 1
+                """,
+                (youtube_video_id,),
+            ).fetchone()
             conn.execute(
                 "UPDATE subtitle_tracks SET is_active = 0 WHERE youtube_video_id = ?",
                 (youtube_video_id,),
@@ -433,14 +449,20 @@ class KimchiCorpusDatabase:
             cursor = conn.execute(
                 """
                 INSERT INTO subtitle_tracks (
-                    youtube_video_id, language_code, is_manual, source_label, fetch_status,
+                    youtube_video_id, kimchi_id, language_code, is_manual, source_label, fetch_status,
+                    stars, complexity_score, lemma_count, unrecognized_count,
                     checksum, fetched_at, raw_subtitle_path, is_active
-                ) VALUES (?, ?, 1, ?, 'completed', ?, ?, ?, 1)
+                ) VALUES (?, ?, ?, 1, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
                 (
                     youtube_video_id,
+                    str(metadata_row["kimchi_id"]) if metadata_row is not None else None,
                     track_result.language_code,
                     track_result.source_label,
+                    int(metadata_row["stars"]) if metadata_row is not None and metadata_row["stars"] is not None else None,
+                    float(metadata_row["complexity_score"]) if metadata_row is not None and metadata_row["complexity_score"] is not None else None,
+                    int(metadata_row["lemma_count"]) if metadata_row is not None and metadata_row["lemma_count"] is not None else None,
+                    int(metadata_row["unrecognized_count"]) if metadata_row is not None and metadata_row["unrecognized_count"] is not None else None,
                     track_result.checksum,
                     checked_at,
                     str(track_result.raw_subtitle_path),
@@ -557,12 +579,12 @@ class KimchiCorpusDatabase:
                 km.kimchi_id,
                 km.name_ko,
                 km.name_en,
-                km.stars,
-                km.complexity_score,
-                km.lemma_count,
+                COALESCE(st.stars, km.stars) AS stars,
+                COALESCE(st.complexity_score, km.complexity_score) AS complexity_score,
+                COALESCE(st.lemma_count, km.lemma_count) AS lemma_count,
                 km.group_id,
                 km.group_name_ko,
-                km.unrecognized_count,
+                COALESCE(st.unrecognized_count, km.unrecognized_count) AS unrecognized_count,
                 km.youtube_url
             FROM subtitle_cues sc
             JOIN subtitle_tracks st ON st.id = sc.track_id AND st.is_active = 1
@@ -574,12 +596,12 @@ class KimchiCorpusDatabase:
               {exact_filter_sql}
               {metadata_filters}
             ORDER BY
+              COALESCE(st.complexity_score, km.complexity_score, 9999999) ASC,
               LENGTH(sc.text) ASC,
               CASE WHEN sc.normalized_text = ? THEN 0 ELSE 1 END ASC,
-              km.stars DESC,
-              km.complexity_score ASC,
-              km.unrecognized_count ASC,
-              km.lemma_count ASC,
+              COALESCE(st.stars, km.stars, 0) DESC,
+              COALESCE(st.unrecognized_count, km.unrecognized_count, 9999999) ASC,
+              COALESCE(st.lemma_count, km.lemma_count, 9999999) ASC,
               sc.start_ms ASC
             LIMIT ?
         """
@@ -642,7 +664,23 @@ class KimchiCorpusDatabase:
                 """,
                 (limit,),
             ).fetchall()
-            return [str(row["youtube_video_id"]) for row in rows]
+        return [str(row["youtube_video_id"]) for row in rows]
+
+    def _apply_schema_migrations(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(subtitle_tracks)").fetchall()
+        }
+        if "kimchi_id" not in columns:
+            conn.execute("ALTER TABLE subtitle_tracks ADD COLUMN kimchi_id TEXT")
+        if "stars" not in columns:
+            conn.execute("ALTER TABLE subtitle_tracks ADD COLUMN stars INTEGER")
+        if "complexity_score" not in columns:
+            conn.execute("ALTER TABLE subtitle_tracks ADD COLUMN complexity_score REAL")
+        if "lemma_count" not in columns:
+            conn.execute("ALTER TABLE subtitle_tracks ADD COLUMN lemma_count INTEGER")
+        if "unrecognized_count" not in columns:
+            conn.execute("ALTER TABLE subtitle_tracks ADD COLUMN unrecognized_count INTEGER")
 
     def _refresh_primary_mapping(self, conn: sqlite3.Connection, youtube_video_id: str) -> None:
         conn.execute(
