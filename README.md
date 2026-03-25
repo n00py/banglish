@@ -99,11 +99,11 @@ addons21/
 
 - `context_provider`
   - Default: `"local_api"`
-  - What it does: chooses whether the add-on queries the new local Kimchi subtitle corpus or the older live YouGlish providers.
+  - What it does: records the preferred context source, but the add-on now always tries the local Kimchi subtitle corpus first.
   - Supported values:
-    - `local_api`: starts or connects to the local corpus API and queries that first.
-    - `youglish`: skips the local corpus and uses the older providers only.
-  - Important detail: if `local_api` is selected but the local corpus returns no hits, the add-on still falls through to the older providers.
+    - `local_api`: the intended primary mode.
+    - `youglish`: legacy value; the add-on still attempts the local corpus first, then falls back to the older providers.
+  - Important detail: local corpus results are always favored now. YouGlish is fallback-only when the local corpus is unavailable or returns no hits.
 
 - `source_field_name`
   - Default: `"Korean"`
