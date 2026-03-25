@@ -168,7 +168,7 @@ class CandidatePickerDialog(QDialog):
         self._progress_lines: list[str] = []
         self._requested_max_candidates = initial_max_candidates
 
-        self.setWindowTitle("YouGlish Context")
+        self.setWindowTitle("BanGlish Context")
         self.resize(1080, 680)
 
         layout = QVBoxLayout(self)
@@ -632,7 +632,7 @@ class CandidatePickerDialog(QDialog):
             return
         if not self._translation_service.is_configured():
             self.translation_label.setText(
-                "DeepL translation is not configured yet. Open Tools > YouGlish Context Settings... to add your key."
+                "DeepL translation is not configured yet. Open Tools > BanGlish Context Settings... to add your key."
             )
             return
 

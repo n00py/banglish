@@ -13,9 +13,9 @@ from .picker import CandidatePickerDialog, RESULT_DONE, RESULT_REFRESH, RESULT_S
 from .settings_dialog import open_deepl_settings_dialog
 
 
-EDITOR_BUTTON_LABEL = "YouGlish Context"
-BROWSER_ACTION_LABEL = "Fetch YouGlish Context"
-SETTINGS_ACTION_LABEL = "YouGlish Context Settings..."
+EDITOR_BUTTON_LABEL = "BanGlish Context"
+BROWSER_ACTION_LABEL = "Fetch BanGlish Context"
+SETTINGS_ACTION_LABEL = "BanGlish Context Settings..."
 ROOT_MODULE = "youglish_korean_context_grabber"
 
 
@@ -80,7 +80,7 @@ def _fetch_candidates_for_note(note: object, max_candidates_override: int | None
     requested_max_candidates = config.effective_max_candidates_for(max_candidates_override)
     mw.progress.start(
         immediate=True,
-        label=f"Fetching YouGlish clips for {query} ({requested_max_candidates} results)...",
+        label=f"Fetching BanGlish clips for {query} ({requested_max_candidates} results)...",
     )
     try:
         candidates = service.fetch_candidates(
@@ -133,7 +133,7 @@ def _current_reviewer_note(reviewer) -> object | None:
 
 def _run_editor_flow(editor) -> None:
     if mw.col is None or editor.note is None:
-        showWarning("Open a note before fetching YouGlish context.")
+        showWarning("Open a note before fetching BanGlish context.")
         return
     try:
         result = _show_viewer(editor.note)
@@ -143,12 +143,12 @@ def _run_editor_flow(editor) -> None:
         return
     if result == int(QDialog.DialogCode.Rejected):
         return
-    tooltip("YouGlish viewer closed.")
+    tooltip("BanGlish viewer closed.")
 
 
 def _run_browser_flow(browser) -> None:
     if mw.col is None:
-        showWarning("Open a collection before fetching YouGlish context.")
+        showWarning("Open a collection before fetching BanGlish context.")
         return
     note_ids = list(browser.selectedNotes())
     if not note_ids:
@@ -173,7 +173,7 @@ def _run_browser_flow(browser) -> None:
         if result in (RESULT_DONE, RESULT_SKIP):
             viewed += 1
     tooltip(
-        "YouGlish Context finished. Opened %d of %d selected note(s)."
+        "BanGlish Context finished. Opened %d of %d selected note(s)."
         % (viewed, processed)
     )
 
@@ -191,7 +191,7 @@ def _run_reviewer_flow(reviewer) -> None:
         return
     if result == int(QDialog.DialogCode.Rejected):
         return
-    tooltip("YouGlish viewer closed.")
+    tooltip("BanGlish viewer closed.")
 
 
 def _open_settings_dialog(*_args, **_kwargs) -> int:

@@ -36,7 +36,7 @@ class DeepLSettingsDialog(QDialog):
         super().__init__(parent or mw)
         self._addon_dir = _addon_dir()
         self._config = config_from_dict(mw.addonManager.getConfig(__name__.split(".ui.")[0]) or {})
-        self.setWindowTitle("YouGlish Context Settings")
+        self.setWindowTitle("BanGlish Context Settings")
         self.resize(680, 420)
 
         layout = QVBoxLayout(self)
