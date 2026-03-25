@@ -27,12 +27,15 @@ class DestinationFieldMapping:
 
 @dataclass(frozen=True)
 class AddonConfig:
+    context_provider: str = "local_api"
     source_field_name: str = "Korean"
     sound_field_name: str = "Sound"
     translation_enabled: bool = True
     translation_provider: str = "deepl_free"
     translation_target_language: str = "EN-US"
     translation_timeout_seconds: int = 15
+    local_api_base_url: str = "http://127.0.0.1:8765"
+    local_api_timeout_seconds: int = 5
     destination_fields: DestinationFieldMapping = field(
         default_factory=DestinationFieldMapping
     )
@@ -89,12 +92,15 @@ def config_from_dict(payload: Mapping[str, Any] | None) -> AddonConfig:
         translation=str(destination_payload.get("translation", defaults.translation)),
     )
     config = AddonConfig(
+        context_provider=str(payload.get("context_provider", "local_api")),
         source_field_name=str(payload.get("source_field_name", "Korean")),
         sound_field_name=str(payload.get("sound_field_name", "Sound")),
         translation_enabled=bool(payload.get("translation_enabled", True)),
         translation_provider=str(payload.get("translation_provider", "deepl_free")),
         translation_target_language=str(payload.get("translation_target_language", "EN-US")),
         translation_timeout_seconds=int(payload.get("translation_timeout_seconds", 15)),
+        local_api_base_url=str(payload.get("local_api_base_url", "http://127.0.0.1:8765")),
+        local_api_timeout_seconds=int(payload.get("local_api_timeout_seconds", 5)),
         destination_fields=destination_fields,
         max_candidates=int(payload.get("max_candidates", 5)),
         overwrite_existing=bool(payload.get("overwrite_existing", False)),

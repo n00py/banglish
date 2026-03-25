@@ -1,10 +1,13 @@
 {
+  "context_provider": "local_api",
   "source_field_name": "Korean",
   "sound_field_name": "Sound",
   "translation_enabled": true,
   "translation_provider": "deepl_free",
   "translation_target_language": "EN-US",
   "translation_timeout_seconds": 15,
+  "local_api_base_url": "http://127.0.0.1:8765",
+  "local_api_timeout_seconds": 5,
   "max_candidates": 5,
   "exact_match_bias": true,
   "exact_match_only": false,

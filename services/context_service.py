@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, Iterable, List, Sequence
 
 from ..config import AddonConfig
 from ..provider.base import BaseContextProvider, ProviderError
+from ..provider.local_api import LocalCorpusProvider
 from ..provider.models import ContextCandidate, ContextFetchRequest
 from ..provider.scrape_fallback import FallbackSettings, OptionalScrapeFallbackProvider
 from ..provider.widget_provider import YouGlishProvider
 from .duplicates import find_duplicate_note_ids
+from .local_api_runtime import ensure_local_api_started
 from .ranking import normalize_text, rank_candidates
 
 
@@ -68,7 +71,17 @@ class YouGlishContextService:
         return ranked[:requested_max_candidates]
 
     def _providers(self) -> Iterable[BaseContextProvider]:
+        if self._config.context_provider == "local_api":
+            try:
+                ensure_local_api_started(
+                    addon_dir=Path(__file__).resolve().parent.parent,
+                    config=self._config,
+                    logger=self._logger,
+                )
+            except Exception as exc:
+                self._logger.warning("Local corpus API could not be started: %s", exc)
         provider_map: Dict[str, BaseContextProvider] = {
+            "local_api": LocalCorpusProvider(self._config),
             "youglish_widget": YouGlishProvider(),
             "scrape_fallback": OptionalScrapeFallbackProvider(
                 FallbackSettings(
@@ -77,7 +90,10 @@ class YouGlishContextService:
                 )
             ),
         }
-        for provider_name in self._config.provider_order:
+        provider_order = list(self._config.provider_order)
+        if self._config.context_provider == "local_api":
+            provider_order.insert(0, "local_api")
+        for provider_name in provider_order:
             provider = provider_map.get(provider_name)
             if provider is not None:
                 yield provider

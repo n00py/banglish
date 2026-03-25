@@ -1,6 +1,6 @@
 # YouGlish Korean Context Grabber
 
-An Anki desktop add-on for Korean vocabulary and sentence cards that reads a Korean term from a note field, fetches real YouGlish examples, and opens a read-only viewer for transcript preview and raw sentence-audio playback.
+An Anki desktop add-on for Korean vocabulary and sentence cards that now supports a local Kimchi-backed subtitle corpus API as its primary context source, while preserving the existing viewer, translation, and raw sentence-audio playback workflow.
 
 ## Features
 
@@ -19,6 +19,9 @@ An Anki desktop add-on for Korean vocabulary and sentence cards that reads a Kor
 - Uses YouGlish for transcript text and timestamps, then extracts a local sentence audio clip with `yt-dlp` and `ffmpeg`
 - Can show an English translation for the selected sentence through DeepL Free when a local API key file is present
 - Adds a `YouGlish Context Settings...` entry under `Tools` so users can save or clear a DeepL key inside Anki
+- Starts a local Kimchi corpus API automatically when `context_provider` is set to `local_api`
+- Exposes Kimchi corpus status and backfill controls inside the settings dialog
+- Discovers high-quality Kimchi media items, resolves them to YouTube videos, and stores Korean manual subtitle cues in a local SQLite corpus
 - Automatically loops through browser cookies it can find and stops at the first browser that yields a usable YouTube audio stream
 - Plays the extracted sentence clip inline when Qt multimedia is available
 - Lets you refetch the current query with a larger result count from a dropdown in the viewer
@@ -36,6 +39,11 @@ For the raw-audio path, the host machine also needs:
 - `yt-dlp`
 - `ffmpeg`
 - at least one supported browser with usable YouTube cookies, typically Firefox, Chrome, or Safari
+
+For the local corpus path, the host machine also needs:
+
+- outbound access to `api.kimchi-reader.app`
+- enough disk space for the SQLite database and cached subtitle files under `user_files/`
 
 ## Install
 
@@ -62,12 +70,15 @@ addons21/
 
 ```json
 {
+  "context_provider": "local_api",
   "source_field_name": "Korean",
   "sound_field_name": "Sound",
   "translation_enabled": true,
   "translation_provider": "deepl_free",
   "translation_target_language": "EN-US",
   "translation_timeout_seconds": 15,
+  "local_api_base_url": "http://127.0.0.1:8765",
+  "local_api_timeout_seconds": 5,
   "max_candidates": 5,
   "exact_match_bias": true,
   "exact_match_only": false,
@@ -85,6 +96,14 @@ addons21/
 ## Config Options
 
 ### Active options in the shipped `config.json`
+
+- `context_provider`
+  - Default: `"local_api"`
+  - What it does: chooses whether the add-on queries the new local Kimchi subtitle corpus or the older live YouGlish providers.
+  - Supported values:
+    - `local_api`: starts or connects to the local corpus API and queries that first.
+    - `youglish`: skips the local corpus and uses the older providers only.
+  - Important detail: if `local_api` is selected but the local corpus returns no hits, the add-on still falls through to the older providers.
 
 - `source_field_name`
   - Default: `"Korean"`
@@ -121,6 +140,16 @@ addons21/
   - What it does: HTTP timeout for the translation request.
   - Good reason to increase it: your network is slow.
   - Good reason to decrease it: you want translation failures to surface faster.
+
+- `local_api_base_url`
+  - Default: `"http://127.0.0.1:8765"`
+  - What it does: points the add-on at the local Kimchi corpus HTTP API.
+  - Good reason to change it: you want the corpus server on another port or another machine.
+
+- `local_api_timeout_seconds`
+  - Default: `5`
+  - What it does: timeout for local corpus API requests and startup health checks.
+  - Good reason to increase it: your local API is slow to start or your machine is heavily loaded.
 
 - `max_candidates`
   - Default: `5`
@@ -265,15 +294,43 @@ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx
 
 Because `user_files/` is ignored by git in this repo, that key file will stay local-only unless you manually force-add it.
 
+## Kimchi Corpus Setup
+
+The settings dialog now includes local corpus controls:
+
+1. Open `Tools`
+2. Click `YouGlish Context Settings...`
+3. Use `Refresh Corpus Status` to confirm the local API and database path
+4. Click `Start/Resume Backfill` to populate the local Kimchi corpus
+5. Use `Recheck Subtitles` later to revisit subtitle availability on known videos
+
+The local corpus stores its data under:
+
+```text
+addons21/9834512704/user_files/kimchi_corpus.sqlite3
+addons21/9834512704/user_files/kimchi_subtitles/
+```
+
+You can also run the corpus tools outside Anki:
+
+```bash
+PYTHONPATH=/path/to/anki python3 -m youglish_korean_context_grabber.corpus.cli stats
+PYTHONPATH=/path/to/anki python3 -m youglish_korean_context_grabber.corpus.cli backfill
+PYTHONPATH=/path/to/anki python3 -m youglish_korean_context_grabber.corpus.cli serve
+```
+
 ## Provider Integration
 
-The add-on depends on `BaseContextProvider` rather than talking directly to YouGlish from the UI.
+The add-on depends on `BaseContextProvider` rather than talking directly to one upstream source from the UI.
 
+- `LocalCorpusProvider`
+  - primary adapter for current builds
+  - queries the local Kimchi-backed subtitle corpus API
 - `OptionalScrapeFallbackProvider`
-  - preferred adapter for current builds
+  - legacy fallback adapter
   - parses the server-rendered bootstrap payload from the YouGlish Korean search page
 - `YouGlishProvider`
-  - secondary adapter
+  - secondary legacy adapter
   - uses YouGlish's documented JavaScript widget when Qt web engine support is available in Anki
 
 This split is intentional so the fetch layer can be adjusted later without rewriting the note update or UI flows.
@@ -281,12 +338,11 @@ This split is intentional so the fetch layer can be adjusted later without rewri
 
 ## Known Limitations
 
-- Human-readable source titles are not always available from current public YouGlish payloads.
-- The HTML fallback is limited by whatever candidates YouGlish includes in the bootstrap payload for a search page.
-- Raw audio extraction depends on `yt-dlp`, `ffmpeg`, and usable browser cookies for YouTube on the local machine.
+- The local Kimchi corpus is only as good as the available Kimchi media feed and the YouTube subtitle availability behind those media items.
+- Subtitle ingestion currently keeps only Korean manual subtitles and intentionally rejects auto captions.
+- Raw audio extraction still depends on `yt-dlp`, `ffmpeg`, and usable browser cookies for YouTube on the local machine.
 - Inline playback of the extracted clip depends on the Qt multimedia components available in your Anki build.
-- Browser bulk mode is still one-note-at-a-time and depends on network availability and YouGlish access limits.
-- Heavy usage may hit YouGlish daily limits, especially on free plans.
+- Browser bulk mode is still one-note-at-a-time.
 
 ## Runtime Files
 
