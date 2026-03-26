@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aqt import gui_hooks, mw
+from aqt.toolbar import BottomBar
 from aqt.qt import QAction, QDialog, qconnect
 from aqt.utils import showWarning, tooltip
 
@@ -17,6 +18,7 @@ EDITOR_BUTTON_LABEL = "BanGlish Context"
 BROWSER_ACTION_LABEL = "Fetch BanGlish Context"
 SETTINGS_ACTION_LABEL = "BanGlish Context Settings..."
 ROOT_MODULE = "youglish_korean_context_grabber"
+REVIEWER_BUTTON_URL = "banglish_review"
 
 
 def install_hooks(module_name: str) -> None:
@@ -37,6 +39,7 @@ def install_hooks(module_name: str) -> None:
         gui_hooks.main_window_did_init.append(_install_settings_actions)
     else:
         _install_settings_actions()
+    _install_reviewer_bottom_bar_button()
 
 
 def _addon_dir() -> Path:
@@ -213,6 +216,51 @@ def _install_settings_actions(*_args, **_kwargs) -> None:
         action = QAction(SETTINGS_ACTION_LABEL, mw)
         qconnect(action.triggered, lambda _checked=False: _open_settings_dialog())
         mw.form.menuTools.addAction(action)
+
+
+def _install_reviewer_bottom_bar_button() -> None:
+    if getattr(mw, "_banglish_bottom_bar_installed", False):
+        return
+    mw._banglish_bottom_bar_installed = True
+    default_draw = BottomBar.draw
+
+    def draw_bottom_bar(self, buf: str, web_context, link_handler):
+        reviewer = getattr(mw, "reviewer", None)
+        if web_context is reviewer and getattr(mw, "state", "") == "review":
+            button_html = _reviewer_button_html()
+            default_link_handler = link_handler
+
+            def banglish_link_handler(url: str) -> None:
+                if url == REVIEWER_BUTTON_URL:
+                    _run_reviewer_flow(reviewer)
+                    return
+                default_link_handler(url=url)
+
+            return default_draw(
+                self,
+                buf="\n".join([buf, button_html]),
+                web_context=web_context,
+                link_handler=banglish_link_handler,
+            )
+
+        return default_draw(
+            self,
+            buf=buf,
+            web_context=web_context,
+            link_handler=link_handler,
+        )
+
+    BottomBar.draw = draw_bottom_bar
+
+
+def _reviewer_button_html() -> str:
+    return (
+        f"<button onclick=\"pycmd('{REVIEWER_BUTTON_URL}')\" "
+        "id=\"banglish-review-button\" "
+        "title=\"Open BanGlish Context\">"
+        "BanGlish"
+        "</button>"
+    )
 
 
 def _add_editor_button(buttons, editor):
