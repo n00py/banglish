@@ -302,6 +302,7 @@ def _addon_module_from_folder(folder_name: str):
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
+    module.__dict__["__name__"] = folder_name
     return module
 
 
