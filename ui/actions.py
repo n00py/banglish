@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aqt import gui_hooks, mw
-from aqt.toolbar import BottomBar
+from aqt.reviewer import Reviewer
 from aqt.qt import QAction, QDialog, qconnect
 from aqt.utils import showWarning, tooltip
 
@@ -19,6 +19,7 @@ BROWSER_ACTION_LABEL = "Fetch BanGlish Context"
 SETTINGS_ACTION_LABEL = "BanGlish Context Settings..."
 ROOT_MODULE = "youglish_korean_context_grabber"
 REVIEWER_BUTTON_URL = "banglish_review"
+REVIEWER_BUTTON_MARKER = "banglish-review-overlay"
 
 
 def install_hooks(module_name: str) -> None:
@@ -35,11 +36,14 @@ def install_hooks(module_name: str) -> None:
         gui_hooks.browser_will_show_context_menu.append(_add_browser_context_action)
     if hasattr(gui_hooks, "reviewer_will_show_context_menu"):
         gui_hooks.reviewer_will_show_context_menu.append(_add_reviewer_context_action)
+    if hasattr(gui_hooks, "webview_will_set_content"):
+        gui_hooks.webview_will_set_content.append(_inject_reviewer_overlay_button)
+    if hasattr(gui_hooks, "webview_did_receive_js_message"):
+        gui_hooks.webview_did_receive_js_message.append(_handle_reviewer_overlay_click)
     if hasattr(gui_hooks, "main_window_did_init"):
         gui_hooks.main_window_did_init.append(_install_settings_actions)
     else:
         _install_settings_actions()
-    _install_reviewer_bottom_bar_button()
 
 
 def _addon_dir() -> Path:
@@ -218,49 +222,41 @@ def _install_settings_actions(*_args, **_kwargs) -> None:
         mw.form.menuTools.addAction(action)
 
 
-def _install_reviewer_bottom_bar_button() -> None:
-    if getattr(mw, "_banglish_bottom_bar_installed", False):
-        return
-    mw._banglish_bottom_bar_installed = True
-    default_draw = BottomBar.draw
-
-    def draw_bottom_bar(self, buf: str, web_context, link_handler):
-        reviewer = getattr(mw, "reviewer", None)
-        if web_context is reviewer and getattr(mw, "state", "") == "review":
-            button_html = _reviewer_button_html()
-            default_link_handler = link_handler
-
-            def banglish_link_handler(url: str) -> None:
-                if url == REVIEWER_BUTTON_URL:
-                    _run_reviewer_flow(reviewer)
-                    return
-                default_link_handler(url=url)
-
-            return default_draw(
-                self,
-                buf="\n".join([buf, button_html]),
-                web_context=web_context,
-                link_handler=banglish_link_handler,
-            )
-
-        return default_draw(
-            self,
-            buf=buf,
-            web_context=web_context,
-            link_handler=link_handler,
-        )
-
-    BottomBar.draw = draw_bottom_bar
-
-
 def _reviewer_button_html() -> str:
     return (
+        f"<div id=\"{REVIEWER_BUTTON_MARKER}\" "
+        "style=\"position:fixed;left:24px;bottom:28px;z-index:9999;\">"
         f"<button onclick=\"pycmd('{REVIEWER_BUTTON_URL}')\" "
-        "id=\"banglish-review-button\" "
-        "title=\"Open BanGlish Context\">"
-        "BanGlish"
-        "</button>"
+        "title=\"Open BanGlish Context\" "
+        "style=\""
+        "padding:8px 18px;"
+        "border-radius:999px;"
+        "border:1px solid #cfcfcf;"
+        "background:#fff7e6;"
+        "color:#6d4b00;"
+        "font-weight:700;"
+        "font-size:14px;"
+        "box-shadow:0 2px 6px rgba(0,0,0,0.12);"
+        "cursor:pointer;"
+        "\">BanGlish</button></div>"
     )
+
+
+def _inject_reviewer_overlay_button(web_content, context) -> None:
+    if not isinstance(context, Reviewer):
+        return
+    if REVIEWER_BUTTON_MARKER in getattr(web_content, "body", ""):
+        return
+    web_content.body += _reviewer_button_html()
+
+
+def _handle_reviewer_overlay_click(handled, message: str, context):
+    if message != REVIEWER_BUTTON_URL:
+        return handled
+    if not isinstance(context, Reviewer):
+        return handled
+    _run_reviewer_flow(context)
+    return (True, None)
 
 
 def _add_editor_button(buttons, editor):
