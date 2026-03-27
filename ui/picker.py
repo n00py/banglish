@@ -31,7 +31,7 @@ from ..services.audio_clips import (
     candidate_youtube_timestamp_url,
 )
 from ..services.logging_utils import get_logger
-from ..services.sound_field import append_clip_to_note_field, note_has_field
+from ..services.sentence_fields import note_has_sentence_fields, save_sentence_fields
 from ..services.ttmik_cards import create_ttmik_card
 from ..services.translation_service import DeepLTranslationService, TranslationError
 
@@ -163,6 +163,7 @@ class CandidatePickerDialog(QDialog):
         self._audio_job_running = False
         self._translation_job_running = False
         self._create_card_job_running = False
+        self._save_sentence_job_running = False
         self._translation_request_key = ""
         self._current_clip_path: Path | None = None
         self._current_clip_candidate: ContextCandidate | None = None
@@ -276,7 +277,7 @@ class CandidatePickerDialog(QDialog):
         self.stop_button.setEnabled(bool(candidates))
         self.copy_button = QPushButton("Copy Transcript", self)
         self.copy_button.setEnabled(bool(candidates))
-        self.append_sound_button = QPushButton("Append to Sound", self)
+        self.append_sound_button = QPushButton("Save Sentence", self)
         self.append_sound_button.setEnabled(False)
         self.create_ttmik_button = QPushButton("Create TTMIK Card", self)
         self.create_ttmik_button.setEnabled(bool(candidates))
@@ -425,28 +426,82 @@ class CandidatePickerDialog(QDialog):
         candidate = self.selected_candidate()
         clip_path = self._current_clip_path
         if candidate is None or clip_path is None:
-            self._update_progress_status("Extract a clip before appending it to the note.")
+            self._update_progress_status("Extract a clip before saving the sentence fields.")
             return
         if self._note is None:
             self._update_progress_status("No note is available for this viewer.")
             return
-        result = append_clip_to_note_field(
-            note=self._note,
-            clip_path=clip_path,
-            col=mw.col,
-            field_name=self._sound_field_name,
-        )
-        self._logger.info(
-            "Append to Sound for note %s in field %s: %s",
-            getattr(self._note, "id", "?"),
-            self._sound_field_name,
-            result.message,
-        )
-        self._update_progress_status(result.message)
-        if result.success:
-            self._refresh_note_views()
-            tooltip(result.message)
-        self._sync_append_button_state()
+        if self._save_sentence_job_running:
+            self._update_progress_status("Sentence saving is already running.")
+            return
+
+        self._save_sentence_job_running = True
+        self.append_sound_button.setEnabled(False)
+
+        def task() -> str:
+            translation = self._current_translation_text(candidate)
+            if translation:
+                return translation
+            if not self._translation_enabled:
+                raise TranslationError("English translation is disabled in BanGlish settings.")
+            if not self._translation_service.is_configured():
+                raise TranslationError(
+                    "DeepL translation is not configured. Open Tools > BanGlish Context Settings... to add your key."
+                )
+            return self._translation_service.translate_text(candidate.sentence_text.strip())
+
+        def on_done(future) -> None:
+            self._save_sentence_job_running = False
+            self._sync_append_button_state()
+            try:
+                english_text = future.result()
+            except TranslationError as exc:
+                self._logger.warning("Sentence field translation failed for %s: %s", candidate.sentence_text, exc)
+                self._update_progress_status(str(exc))
+                return
+            except Exception as exc:
+                self._logger.exception("Unexpected sentence field save failure for %s", candidate.video_id)
+                self._update_progress_status(f"Could not prepare sentence fields: {exc}")
+                return
+
+            self._set_translation_text(candidate, english_text)
+            result = save_sentence_fields(
+                note=self._note,
+                clip_path=clip_path,
+                col=mw.col,
+                korean_text=candidate.sentence_text,
+                english_text=english_text,
+            )
+            self._logger.info(
+                "Save Sentence for note %s: %s",
+                getattr(self._note, "id", "?"),
+                result.message,
+            )
+            self._update_progress_status(result.message)
+            if result.success:
+                self._refresh_note_views()
+                tooltip(result.message)
+
+        taskman = getattr(mw, "taskman", None)
+        if taskman is not None and hasattr(taskman, "run_in_background"):
+            taskman.run_in_background(task, on_done=on_done)
+            return
+
+        class _ImmediateFuture:
+            def __init__(self, value=None, error: Exception | None = None) -> None:
+                self._value = value
+                self._error = error
+
+            def result(self):
+                if self._error is not None:
+                    raise self._error
+                return self._value
+
+        try:
+            translated_text = task()
+            on_done(_ImmediateFuture(value=translated_text))
+        except Exception as exc:
+            on_done(_ImmediateFuture(error=exc))
 
     def create_ttmik_card_from_selected(self) -> None:
         candidate = self.selected_candidate()
@@ -815,18 +870,19 @@ class CandidatePickerDialog(QDialog):
         can_append = (
             not self._audio_job_running
             and not self._create_card_job_running
+            and not self._save_sentence_job_running
             and self._current_clip_path is not None
             and self._note is not None
-            and note_has_field(self._note, self._sound_field_name)
+            and note_has_sentence_fields(self._note)
         )
         self.append_sound_button.setEnabled(can_append)
-        if self._note is not None and not note_has_field(self._note, self._sound_field_name):
+        if self._note is not None and not note_has_sentence_fields(self._note):
             self.append_sound_button.setToolTip(
-                f"This note does not have a '{self._sound_field_name}' field."
+                "This note needs 'Sentence Korean', 'Sentence English', and 'Sentence Audio' fields."
             )
         else:
             self.append_sound_button.setToolTip(
-                f"Append the extracted clip into '{self._sound_field_name}'."
+                "Save the sentence into 'Sentence Korean', 'Sentence English', and 'Sentence Audio'."
             )
         self.create_ttmik_button.setEnabled(not self._audio_job_running and not self._create_card_job_running and bool(self._candidates))
         self.create_ttmik_button.setToolTip(
