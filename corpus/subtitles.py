@@ -263,6 +263,8 @@ class ManualKoreanSubtitleFetcher:
                     command,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=YTDLP_TIMEOUT_SECONDS,
                     check=False,
                 )
