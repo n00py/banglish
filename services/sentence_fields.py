@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .sound_field import note_has_field, sound_tag
+from .sound_field import note_has_field
 
 
 SENTENCE_KOREAN_FIELD = "Sentence Korean"
@@ -75,7 +75,7 @@ def save_sentence_fields(
 
     note[SENTENCE_KOREAN_FIELD] = korean_text.strip()
     note[SENTENCE_ENGLISH_FIELD] = english_text.strip()
-    note[SENTENCE_AUDIO_FIELD] = sound_tag(media_filename)
+    note[SENTENCE_AUDIO_FIELD] = media_filename
 
     update_note = getattr(col, "update_note", None)
     flush = getattr(note, "flush", None)
@@ -111,7 +111,7 @@ def save_sentence_fields(
         if (
             str(persisted_note[SENTENCE_KOREAN_FIELD]).strip() != korean_text.strip()
             or str(persisted_note[SENTENCE_ENGLISH_FIELD]).strip() != english_text.strip()
-            or str(persisted_note[SENTENCE_AUDIO_FIELD]).strip() != sound_tag(media_filename)
+            or str(persisted_note[SENTENCE_AUDIO_FIELD]).strip() != media_filename
         ):
             return SaveSentenceFieldsResult(
                 success=False,
